@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# AI Launcher — picks the right model and shows available skills
+# Usage:
+#   ~/ai "your prompt here"   → run with combined model
+#   ~/ai --code "your prompt"  → run with local coder model (offline)
+#   ~/ai --list                → list available skills
+#   ~/ai --models              → list installed models
+
+set -euo pipefail
+
+SKILLS_DIR="$HOME/.config/ollama/skills"
+COMBINED_MODEL="orchestrated-coder:latest"
+LOCAL_CODER="qwen2.5-coder:7b"
+CLOUD_MODEL="glm-5.2:cloud"
+LLAMA3_AGENT="llama3-agent:latest"
+
+# Ensure combined model exists
+ensure_combined() {
+    if ! ollama list 2>/dev/null | grep -q "$COMBINED_MODEL"; then
+        echo "[setup] Building combined model from Modelfile..."
+        ollama create "$COMBINED_MODEL" -f "$HOME/AI/Modelfile" 2>/dev/null || {
+            echo "[warn] Could not build combined model, falling back to $CLOUD_MODEL"
+            return 1
+        }
+    fi
+}
+
+case "${1:-}" in
+    --list|-l)
+        echo "Available skills:"
+        for d in "$SKILLS_DIR"/*/; do
+            name=$(basename "$d")
+            desc=$(grep -m1 'description:' "$d/SKILL.md" 2>/dev/null | sed 's/description: //')
+            printf "  %-22s %s\n" "$name" "$desc"
+        done
+        ;;
+    --models|-m)
+        echo "Installed Ollama models:"
+        ollama list 2>/dev/null || echo "  [error] ollama not running or not installed"
+        ;;
+    --code|-c)
+        shift
+        echo "[run] Using local coder: $LOCAL_CODER"
+        ollama run "$LOCAL_CODER" "$*"
+        ;;
+    --agent|-a)
+        shift
+        echo "[run] Using llama3 self-improving agent: $LLAMA3_AGENT"
+        python3 ~/agent_llama3.py "$*"
+        ;;
+    --improve|-i)
+        shift
+        echo "[run] Self-improvement mode"
+        python3 ~/agent_llama3.py --improve "$*"
+        ;;
+    --analyze)
+        shift
+        echo "[run] Directory analysis mode"
+        python3 ~/agent_llama3.py --analyze "$*"
+        ;;
+    --help|-h|"")
+        cat << 'HELP'
+AI Launcher — orchestration + fast code writing
+
+Usage:
+  ~/ai "your prompt"       Run with combined orchestrated-coder model
+  ~/ai --code "your prompt" Run with local qwen2.5-coder (offline, fast)
+  ~/ai --agent "your prompt" Run with llama3 self-improving agent (web + tools)
+  ~/ai --improve "topic"   Self-improvement: search web and learn
+  ~/ai --analyze /path      Deep directory analysis
+  ~/ai --list              List available skills
+  ~/ai --models            List installed Ollama models
+  ~/ai --help              Show this help
+
+Skills auto-available in combined model:
+  code-fast, pentest-orchestration, pentest-recon,
+  pentest-web, pentest-redteam, pentest-ctf, pentest-report, skill-creator
+
+To build/update the combined model:
+  ollama create orchestrated-coder:latest -f ~/AI/Modelfile
+HELP
+        ;;
+    *)
+        if ensure_combined; then
+            echo "[run] Using combined model (with real tools): $COMBINED_MODEL"
+            python3 "$HOME/AI/agent_run.py" --model "$COMBINED_MODEL" "$*"
+        else
+            echo "[run] Fallback (with real tools): $CLOUD_MODEL"
+            python3 "$HOME/AI/agent_run.py" --model "$CLOUD_MODEL" "$*"
+        fi
+        ;;
+esac

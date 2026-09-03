@@ -1,0 +1,17 @@
+# Hemmeligheter — ALDRI commit
+api
+*.key
+.env
+
+# Store undermapper / egne prosjekter
+private-gpt/
+groq-env/
+
+# Runtime-tilstand
+agent_memory/
+__pycache__/
+*.pyc
+
+# Backupfiler
+*.bak
+*.bak-*
